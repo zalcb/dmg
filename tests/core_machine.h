@@ -1,8 +1,15 @@
 #ifndef CORE_MACHINE_H
 #define CORE_MACHINE_H
 
-#include "cpu.h"
-#include "joyp.h"
+#include <stdlib.h>
+#include <string.h>
+
+#include "../core/cpu/cpu.h"
+#include "../core/memory/mmu.h"
+#include "../core/timer/timer.h"
+#include "../core/video/ppu.h"
+#include "../core/audio/apu.h"
+#include "../core/input/joyp.h"
 
 typedef struct {
     CPU cpu;
@@ -25,7 +32,7 @@ static void core_init(CoreMachine *m) {
 }
 
 static void core_cleanup(CoreMachine *m) {
-    free(m->apu.audio_buffer);
+    apu_cleanup(&m->apu);
     mmu_cleanup(&m->mmu);
 }
 

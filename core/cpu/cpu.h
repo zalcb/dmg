@@ -1,16 +1,9 @@
 #ifndef CPU_HEADER
 #define CPU_HEADER
 
-#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
-#include "apu.h"
-#include "mmu.h"
-#include "ppu.h"
-#include "timer.h"
 
 extern FILE *cpu_log;
 

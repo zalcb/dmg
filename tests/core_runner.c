@@ -4,7 +4,7 @@
 #include <time.h>
 
 #include "core_machine.h"
-#include "rom.h"
+#include "../core/memory/rom.h"
 
 static uint64_t hash_bytes(uint64_t hash, const void *data, size_t size) {
     const uint8_t *bytes = data;

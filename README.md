@@ -72,7 +72,9 @@ make test test-debug test-asan
 make test-timer test-ppu
 ```
 
-The headless runner links the real CPU, MMU, timer, PPU, APU, cartridge and joypad code. It never opens a window or audio device; raylib remains a link dependency for the unused keyboard frontend. `make test` discovers `tests/*_test.c`, including timer and PPU suites when present. CI runs the release, O0 debug and sanitizer suites on macOS. The core suite checks arithmetic/flags, CB memory operations, call/return, interrupt wakeup, MMU mapping, APU register effects and real audio output, plus deterministic full-core execution, trace equivalence and serial/cycle limits.
+The headless runner links the real CPU, MMU, timer, PPU, APU, cartridge and joypad code. It never opens a window or audio device and does not require raylib or pkg-config. A C18 compiler, make, Python 3 and the system math library are enough for `make headless test test-debug test-asan`. CI runs these suites on macOS and Linux, and separately builds the raylib frontend on macOS.
+
+`make test` discovers integration tests in `tests/*_test.c` and subsystem tests in `core/*/*_test.c`. The suites check arithmetic/flags, CB memory operations, call/return, interrupt wakeup, MMU mapping, APU register masks/wave RAM/DAC triggers and real audio output, all 65,536 joypad state transitions, 16,185,152 timer differential comparisons, and 54,193 full-state PPU comparisons. The integration checks preserve deterministic execution, trace equivalence and serial/cycle limits.
 
 Without a ROM, the runner executes a deterministic synthetic instruction loop that writes RAM and scroll registers while rendering background/window/sprites, advancing an enabled timer, and generating all four audio channels:
 
@@ -101,16 +103,35 @@ python3 tests/bench_compare.py --cycles 41943040 --runs 3
 
 This builds the same harness against archived commit `a3f8b97` and the current checkout, checks matching state/frame/audio hashes for every run, and byte-compares a short explicit trace. It reports four separate cases: unchanged baseline with per-instruction flushing to `/dev/null`, a baseline **control** with only the trace call removed in a temporary copy, final buffered tracing to `/dev/null`, and final default tracing off. The control is deliberately not presented as the original baseline. No tracked baseline source is modified. `/dev/null` avoids filesystem throughput noise; real trace files will have different costs.
 
-An Apple Silicon run with Apple clang 21, raylib 6.0, `-O3`, 41,943,040 requested cycles and three repetitions measured these medians for the tracing/harness change alone:
+An Apple Silicon run with Apple clang 21, raylib 6.0 for the archived baseline, `-O3`, 41,943,040 requested cycles and five repetitions measured these medians after the tracing, timer, PPU and module-boundary changes:
 
 | Mode | Seconds |
 | --- | ---: |
-| Original baseline, trace + per-instruction flush | 4.385244 |
-| Baseline control, trace call removed | 0.253667 |
-| Buffered explicit trace | 2.245082 |
-| Default, trace off | 0.258982 |
+| Original baseline, trace + per-instruction flush | 4.272852 |
+| Baseline control, trace call removed | 0.253886 |
+| Buffered explicit trace | 2.146161 |
+| Default, trace off | 0.186231 |
 
-The default throughput improvement was **16.93×**; the core-only ratio against the no-trace control was **0.98×**, so this result demonstrates removal of tracing overhead, not a CPU/timer/PPU algorithm speedup. Every case produced `cycles=41943044 steps=4993219 frames=597 samples=480000 state=daab8f506cd87ea4 frame=540a66195770dc6c audio=24164f96c4bc876d`. Re-run the script to measure subsequent core changes rather than relying on these historical timings.
+The default throughput improvement was **22.94×**, dominated by removing instruction tracing from the hot path. The core-only improvement against the no-trace control was **1.36×** (26.6% less elapsed time), which separates algorithm/build improvements from logging overhead. Every case produced `cycles=41943044 steps=4993219 frames=597 samples=480000 state=daab8f506cd87ea4 frame=540a66195770dc6c audio=24164f96c4bc876d`; short explicit traces also matched byte-for-byte. These are instrumented synthetic-workload measurements, not a promise of the same gain in every game. Re-run the script to measure subsequent changes. The comparison script still needs raylib/pkg-config to compile the original archived emulator; current headless builds do not.
+
+The final sanitizer build also passes Blargg `cpu_instrs` (all 11 subtests, 224,317,604 cycles) and `instr_timing` (2,760,516 cycles), with the original baseline's reported state/frame/audio fingerprints. The timer and rendering optimizations preserve existing behavior; passing these suites does not establish complete Game Boy hardware accuracy.
+
+### Core organization and structural checks
+
+The core is grouped into `audio`, `cpu`, `input`, `memory` (bus, cartridge banking and ROM loading), `timer`, and `video`. Each subsystem keeps its C source, public header and focused tests together. Opcode implementation helpers are private to `core/cpu/opcodes.c`; `opcodes.h` only exposes instruction dispatch. Headers use forward declarations where only pointers are needed, and explicit relative includes make both compiler and static-analysis dependencies unambiguous.
+
+Raylib keyboard polling, windowing and audio-device ownership stay in `src/main.c`. The core accepts active-low button state through `joypad_set_state` and exposes audio cleanup through `apu_cleanup`. No emulation timing or rendering behavior is changed by these boundaries. Generate a local, current compilation database with `make compile-commands`; it is intentionally not versioned because it contains checkout-specific paths.
+
+With Sentrux 0.5.7 installed:
+
+```bash
+sentrux check .
+sentrux gate .
+```
+
+The rules require zero dependency cycles and prohibit core-to-frontend imports. Sentrux 0.5.7 reports **8,034/10,000**, above the improvement front's 8,000 target, versus **6,363** at `a3f8b97`. The original reported cycle was a C-include resolution artifact: a control that changed only header paths scored **7,089** with zero cycles. The remaining improvement comes from narrower APIs, cohesive subsystem boundaries and tests; the score gain must not be presented as removing a real runtime dependency cycle.
+
+The checked-in baseline protects the accepted structural state; do not regenerate it merely to hide a regression. Sentrux measures structure, not emulator throughput or hardware fidelity, so performance changes must also pass the regression suites and benchmark comparison.
 
 ---
 

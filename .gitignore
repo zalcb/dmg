@@ -54,6 +54,7 @@ dkms.conf
 # Clangd files and folders
 *.clangd
 .cache/
+compile_commands.json
 
 # Build files and executables
 build/

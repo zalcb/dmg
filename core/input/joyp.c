@@ -2,9 +2,7 @@
 
 #include <stdint.h>
 
-#include "cpu.h"
-#include "mmu.h"
-#include "raylib.h"  // for keyboard input
+#include "../cpu/cpu.h"
 
 void joypad_init(Joypad *joypad, struct MMU *mmu, struct CPU *cpu) {
     joypad->mmu = mmu;
@@ -37,32 +35,12 @@ uint8_t joypad_read(Joypad *joypad) {
     return result;  // return the joypad state
 }
 
-void joypad_update(Joypad *joypad) {
+void joypad_set_state(Joypad *joypad, uint8_t buttons, uint8_t dpad) {
     uint8_t old_buttons = joypad->buttons;  // save old buttons state
     uint8_t old_dpad    = joypad->dpad;     // save old D-PAD state
 
-    joypad->buttons     = 0x0F;  // reset buttons state
-    joypad->dpad        = 0x0F;  // reset D-PAD state
-
-    // check keyboard state for button presses
-    if (IsKeyDown(KEY_Z))
-        joypad->buttons &= ~JOYP_A;  // A
-    if (IsKeyDown(KEY_X))
-        joypad->buttons &= ~JOYP_B;  // B
-    if (IsKeyDown(KEY_ENTER))
-        joypad->buttons &= ~JOYP_START;  // START
-    if (IsKeyDown(KEY_SPACE))
-        joypad->buttons &= ~JOYP_SELECT;  // SELECT
-
-    // check keyboard state for D-PAD presses
-    if (IsKeyDown(KEY_RIGHT))
-        joypad->dpad &= ~JOYP_RIGHT;  // RIGHT
-    if (IsKeyDown(KEY_LEFT))
-        joypad->dpad &= ~JOYP_LEFT;  // LEFT
-    if (IsKeyDown(KEY_UP))
-        joypad->dpad &= ~JOYP_UP;  // UP
-    if (IsKeyDown(KEY_DOWN))
-        joypad->dpad &= ~JOYP_DOWN;  // DOWN
+    joypad->buttons = buttons & 0x0F;
+    joypad->dpad = dpad & 0x0F;
 
     uint8_t button_was_pressed = old_buttons & ~joypad->buttons;
     uint8_t dpad_was_pressed   = old_dpad & ~joypad->dpad;

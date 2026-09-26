@@ -1,4 +1,4 @@
-#include "cpu.h"
+#include "../cpu/cpu.h"
 #include "timer.h"
 
 #include <inttypes.h>

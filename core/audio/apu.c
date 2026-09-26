@@ -1,10 +1,10 @@
 #include "apu.h"
 
 #include <math.h>
+#include <stdlib.h>
+#include <string.h>
 #include <stdint.h>
 
-#include "cpu.h"
-#include "mmu.h"
 
 /* helper functions */
 static const uint8_t duty_table[4][8] = {

@@ -213,6 +213,7 @@ typedef struct APU {
 
 void apu_init(APU *apu, struct CPU *cpu, struct MMU *mmu);
 void apu_reset(APU *apu);
+void apu_cleanup(APU *apu);
 void apu_step(APU *apu, int cycles);
 
 /* mmu write/read handlers */
