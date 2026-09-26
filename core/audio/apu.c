@@ -69,7 +69,7 @@ static float get_ch3_output_float(APU *apu) {
         sample >>= 4;  // get high nibble
     }
 
-    float output = (float)sample / 15.0f * 2.0f - 1.0f;  // convert to -1.0 to 1.0
+    float output = fmaf((float)sample / 15.0f, 2.0f, -1.0f);  // convert to -1.0 to 1.0
 
     switch (apu->ch3.output_level) {
         case 0:  return 0.0f;            // mute
@@ -343,9 +343,9 @@ static void update_channel_timers(APU *apu, int cycles) {
 static float soft_clip(float x) {
     // gentle soft clipping to prevent harsh distortion
     if (x > 0.9f)
-        return 0.9f + 0.1f * tanhf((x - 0.9f) * 10.0f);
+        return fmaf(0.1f, tanhf((x - 0.9f) * 10.0f), 0.9f);
     if (x < -0.9f)
-        return -0.9f + 0.1f * tanhf((x + 0.9f) * 10.0f);
+        return fmaf(0.1f, tanhf((x + 0.9f) * 10.0f), -0.9f);
     return x;
 }
 
@@ -390,10 +390,10 @@ static void generate_sample(APU *apu) {
 
     // apply gentle interpolation to reduce sudden changes
     const float interp_factor = 0.96f; // very light smoothing to avoid muffling
-    ch1_raw              = apu->ch1_last_output * (1.0f - interp_factor) + ch1_raw * interp_factor;
-    ch2_raw              = apu->ch2_last_output * (1.0f - interp_factor) + ch2_raw * interp_factor;
-    ch3_raw              = apu->ch3_last_output * (1.0f - interp_factor) + ch3_raw * interp_factor;
-    ch4_raw              = apu->ch4_last_output * (1.0f - interp_factor) + ch4_raw * interp_factor;
+    ch1_raw = fmaf(apu->ch1_last_output, 1.0f - interp_factor, ch1_raw * interp_factor);
+    ch2_raw = fmaf(apu->ch2_last_output, 1.0f - interp_factor, ch2_raw * interp_factor);
+    ch3_raw = fmaf(apu->ch3_last_output, 1.0f - interp_factor, ch3_raw * interp_factor);
+    ch4_raw = fmaf(apu->ch4_last_output, 1.0f - interp_factor, ch4_raw * interp_factor);
 
     // store for next sample
     apu->ch1_last_output = ch1_raw;
@@ -463,8 +463,8 @@ static void generate_sample(APU *apu) {
 
     // very light low-pass filter to reduce only the harshest edges
     const float lp_alpha = 0.5f;  // minimal smoothing
-    left                 = apu->lp_left + lp_alpha * (left - apu->lp_left);
-    right                = apu->lp_right + lp_alpha * (right - apu->lp_right);
+    left                 = fmaf(lp_alpha, left - apu->lp_left, apu->lp_left);
+    right                = fmaf(lp_alpha, right - apu->lp_right, apu->lp_right);
     apu->lp_left         = left;
     apu->lp_right        = right;
 

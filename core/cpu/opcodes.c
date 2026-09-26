@@ -1,5 +1,6 @@
 
 #include <stdbool.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -1460,7 +1461,7 @@ static void log_cpu_error(CPU *cpu, const char *format, ...) {
     fprintf(stderr, "D: 0x%02X  E: 0x%02X\n", cpu->d, cpu->e);
     fprintf(stderr, "H: 0x%02X  L: 0x%02X\n", cpu->h, cpu->l);
     fprintf(stderr, "sp: 0x%04X\n", cpu->sp);
-    fprintf(stderr, "cycles: %llu\n", cpu->cycles);
+    fprintf(stderr, "cycles: %" PRIu64 "\n", cpu->cycles);
     fprintf(stderr, "===================\n\n");
 
     va_end(args);
