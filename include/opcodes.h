@@ -38,19 +38,19 @@
 void decode_and_execute(CPU *cpu, uint8_t op);
 
 // helper to advance the program counter
-inline void advance_pc(CPU *cpu, uint8_t n) { cpu->pc += n; }
+static inline void advance_pc(CPU *cpu, uint8_t n) { cpu->pc += n; }
 
 // helper to get the high byte of a 16-bit value
-inline uint8_t high_byte(uint16_t val) { return (val >> 8) & 0xFF; }
+static inline uint8_t high_byte(uint16_t val) { return (val >> 8) & 0xFF; }
 
 // helper to get the low byte of a 16-bit value
-inline uint8_t low_byte(uint16_t val) { return val & 0xFF; }
+static inline uint8_t low_byte(uint16_t val) { return val & 0xFF; }
 
 /* helper to get a flag */
-inline int get_flag(CPU *cpu, uint8_t flag) { return (cpu->f & flag) != 0; }
+static inline int get_flag(CPU *cpu, uint8_t flag) { return (cpu->f & flag) != 0; }
 
 /* helper to set a flag */
-inline void set_flag(CPU *cpu, uint8_t flag, int enable) {
+static inline void set_flag(CPU *cpu, uint8_t flag, int enable) {
     if (enable) {
         cpu->f |= flag; /* if enable = 1, turn the flag bit to 1 */
     } else {
@@ -58,7 +58,7 @@ inline void set_flag(CPU *cpu, uint8_t flag, int enable) {
     }
 }
 
-inline void add_i8_to_u16(uint16_t sp, int8_t off, uint16_t *out, CPU *cpu) {
+static inline void add_i8_to_u16(uint16_t sp, int8_t off, uint16_t *out, CPU *cpu) {
     uint16_t res = sp + off;
     uint16_t tmp = sp ^ off ^ res;      /* XOR catches carries/borrows */
     set_flag(cpu, FLAG_H, tmp & 0x10);  /* carry from bit 3 */
@@ -72,7 +72,7 @@ inline void add_i8_to_u16(uint16_t sp, int8_t off, uint16_t *out, CPU *cpu) {
 #define ADV_PC(cpu, n) advance_pc((cpu), (n))
 #define ADV_CYCLES(cpu, n) tick((cpu), (n))
 
-inline void call_u16(CPU *cpu) {
+static inline void call_u16(CPU *cpu) {
     /* 1. fetch the target address (little‑endian) */
     uint16_t target = mem_read16(cpu->pc);
 
@@ -93,7 +93,7 @@ inline void call_u16(CPU *cpu) {
     ADV_CYCLES(cpu, 24);
 }
 
-inline void ret(CPU *cpu) {
+static inline void ret(CPU *cpu) {
     /* 1. pop the return address (low byte first, then high byte) */
     uint8_t low = mem_read(cpu->sp++);
     uint8_t high = mem_read(cpu->sp++);
