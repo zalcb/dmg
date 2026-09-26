@@ -1,0 +1,10 @@
+name: Core regression tests
+on: [push, pull_request]
+jobs:
+  core:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install raylib pkg-config
+      - run: make -j3 all debug asan headless
+      - run: make test test-debug test-asan

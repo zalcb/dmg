@@ -36,13 +36,42 @@ void timer_reset(Timer *timer) {
 /* called from advance_cycles in opcodes.h
 cycles = 4, 8, 12, 16... */
 void timer_step(Timer *timer, uint8_t cycles) {
-    while (cycles--) {
+    const uint8_t div_bit = selected_div_bit(timer);
+    const uint16_t period = 2u << div_bit;
+
+    while (cycles) {
+        if (timer->overflow_phase == 0xFF) {
+            if (!(timer->tac & 0x04)) {
+                timer->div += cycles;
+                return;
+            }
+
+            uint16_t until_edge = period - (timer->div & (period - 1));
+            uint8_t next_bit = ((timer->div + 1) >> div_bit) & 1;
+            if (timer->prev_div_bit == 1 && !next_bit) {
+                until_edge = 1;
+            } else if (until_edge == 1 && timer->prev_div_bit != 1) {
+                until_edge += period;
+            }
+
+            if (cycles < until_edge) {
+                timer->div += cycles;
+                timer->prev_div_bit = (timer->div >> div_bit) & 1;
+                return;
+            }
+
+            timer->div += until_edge - 1;
+            cycles -= until_edge - 1;
+            timer->prev_div_bit = 1;
+        }
+
+        cycles--;
         /* 1. increment DIV, our system counter */
         timer->div++;
 
         /* 2. falling edge detector (only if TAC is enabled -> bit 2) */
         if (timer->tac & 0x04) {
-            uint8_t bit = (timer->div >> selected_div_bit(timer)) &
+            uint8_t bit = (timer->div >> div_bit) &
                           0x01;  // get the selected bit (mux selector)
             uint8_t falling_edge = (timer->prev_div_bit == 1) && bit == 0;  // falling edge detector
             timer->prev_div_bit  = bit;  // update the previous bit

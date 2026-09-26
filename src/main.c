@@ -26,18 +26,26 @@ void AudioInputCallback(void *buffer, unsigned int frames) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 2) {
-        fprintf(stderr, "usage: %s <rom_file>\n", argv[0]);
+    const char *rom_file = NULL;
+    const char *trace_file = NULL;
+    for (int i = 1; i < argc; ++i) {
+        if (!strcmp(argv[i], "--trace") && i + 1 < argc && !trace_file) {
+            trace_file = argv[++i];
+        } else if (argv[i][0] != '-' && !rom_file) {
+            rom_file = argv[i];
+        } else {
+            fprintf(stderr, "usage: %s [--trace FILE] <rom_file>\n", argv[0]);
+            return 1;
+        }
+    }
+    if (!rom_file) {
+        fprintf(stderr, "usage: %s [--trace FILE] <rom_file>\n", argv[0]);
         return 1;
     }
-
-    cpu_log = fopen("cpu.log", "w");
-    if (!cpu_log) {
-        perror("cpu.log");
-        exit(1);
+    if (trace_file && !(cpu_log = fopen(trace_file, "w"))) {
+        perror(trace_file);
+        return 1;
     }
-
-    const char *rom_file = argv[1];
 
     // initialize and reset components
     mmu_init(&mmu, &cpu, &timer, &ppu, &joypad, &apu);
@@ -114,6 +122,11 @@ int main(int argc, char *argv[]) {
     UnloadTexture(texture);
     CloseWindow();
 
-    fclose(cpu_log);
+    free(apu.audio_buffer);
+    mmu_cleanup(&mmu);
+    if (cpu_log && fclose(cpu_log)) {
+        perror("trace close");
+        return 1;
+    }
     return 0;
 }
