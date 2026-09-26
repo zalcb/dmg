@@ -74,6 +74,7 @@ typedef struct PPU {
     uint8_t framebuffer[LCD_HEIGHT]
                        [LCD_WIDTH];  // framebuffer for the LCD
                                      // each pixel is a 0-3 shade of gray
+    uint16_t color_framebuffer[LCD_HEIGHT][LCD_WIDTH];
 
     int frame_completed;  // flag to indicate if the frame (all scanlines) is
                           // completed
@@ -86,6 +87,7 @@ void ppu_step(PPU *ppu, int cycles);
 
 /* helper to get current framebuffer data and pass it to the main game loop */
 const uint8_t (*ppu_get_framebuffer(PPU *ppu))[LCD_WIDTH];
+const uint16_t (*ppu_get_color_framebuffer(PPU *ppu))[LCD_WIDTH];
 
 /* function to handle DMA transfer */
 void ppu_dma_transfer(PPU *ppu, uint8_t value);

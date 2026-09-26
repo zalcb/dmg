@@ -1,7 +1,7 @@
 <h1 align="center">dmg</h1>
 
 <p align="center">
-  A GameBoy (DMG) emulator written in C.
+  A Game Boy (DMG) and Game Boy Color (CGB) emulator written in C.
 </p>
 
 <p align="center">
@@ -62,12 +62,13 @@ These recordings show games running in the emulator. Click a preview to watch th
 
 - CPU emulation with the complete SM83 instruction set.
 - PPU emulation with background, window and sprite rendering at the original 160 × 144 resolution.
+- Native CGB RGB555 palettes, banked tiles and attributes, sprite priority, VRAM DMA, and double-speed CPU operation.
 - Four-channel APU with two pulse channels, a wave channel and a noise channel, with 48 kHz stereo output.
 - Bank switching for ROM-only, MBC1, MBC2, MBC3 and MBC5 cartridges.
 - Keyboard input, display and audio output using [raylib](https://www.raylib.com/).
 - A headless mode for testing and debugging on macOS and Linux, without opening a window or audio device.
 
-The project currently focuses on the original GameBoy (DMG). Compatibility and hardware accuracy are still being improved.
+Separate `gb` and `gbc` binaries share the same core and can run concurrently. The existing DMG rendering path and regression fingerprints are preserved. Compatibility and hardware accuracy are still being improved; native CGB support does not mean every commercial title is verified.
 
 ## Building and running locally
 
@@ -82,13 +83,28 @@ brew install raylib pkg-config
 make
 ```
 
-This will create a binary file called `gb` in the root directory of the project. You can run the emulator by executing:
+This creates both desktop binaries. `gb` defaults to DMG; `gbc` automatically selects native CGB for color-capable cartridges and DMG for older cartridges:
 
 ```bash
 ./gb <path_to_rom>
+./gbc <path_to_color_rom>
 ```
 
 Run this command from the repository root so the emulator can find its boot ROM. Commercial game ROMs are not included; you will need to provide your own legally obtained copies.
+
+Use `--model dmg|cgb|auto` to override either binary's default. Dual-mode cartridges can run in either mode; CGB-only cartridges are rejected in DMG mode. CGB starts after boot with CGB CPU registers, without a boot ROM. Forcing native `cgb` mode on a DMG-only ROM does not reproduce Nintendo's compatibility palettes; use `auto` for normal play.
+
+Both desktop builds also run on Linux with raylib and its desktop development dependencies installed. Python 3 is needed for the regression suites. `make debug` and `make asan` build both models with separate debug/sanitizer outputs; see the [developer guide](docs/development.md).
+
+### Game Boy Color evidence and limits
+
+The public [CGB Acid2 v1.1](https://github.com/mattcurrie/cgb-acid2) test matches its reference image exactly, with zero differing pixels. The original animated color-card demo exercises both VRAM banks, palette/flip attributes and moving sprites without commercial game assets. Generate it with `python3 tests/cgb_demo.py chroma.gbc`, then run `./gbc chroma.gbc`.
+
+![DMG and CGB desktop builds running concurrently](public/images/dmg-cgb-desktop.png)
+
+[Watch the simultaneous DMG/CGB desktop recording](public/showcase/cgb-demo.mp4).
+
+CGB emulation is scanline-based, not a dot-accurate pixel FIFO. Exact speed-switch delays, CGB boot ROMs, link/infrared communication, battery-save persistence and physical rumble are not implemented. MBC5 rumble cartridges use the correct RAM-bank mask without producing device rumble.
 
 ### Controls
 
@@ -126,7 +142,7 @@ You can find the implementations in [core/cpu](core/cpu), [core/video](core/vide
 
 ## Roadmap
 
-The next steps are to improve hardware timing, test more games and add quality-of-life features. After that, the plan is to add support for modern joypads such as the DualSense and Xbox controllers. Eventually, GBC support should be added as well.
+Native Game Boy Color support is implemented alongside DMG. The next steps are to improve hardware timing, expand compatibility testing and add quality-of-life features, followed by modern joypad support such as DualSense and Xbox controllers.
 
 ## Sources
 

@@ -42,6 +42,19 @@
 #define LYC 0xFF45   // LY compare
 #define DMA 0xFF46   // DMA transfer register
 #define BGP 0xFF47   // background palette
+#define KEY1 0xFF4D
+#define VBK 0xFF4F
+#define HDMA1 0xFF51
+#define HDMA2 0xFF52
+#define HDMA3 0xFF53
+#define HDMA4 0xFF54
+#define HDMA5 0xFF55
+#define BGPI 0xFF68
+#define BGPD 0xFF69
+#define OBPI 0xFF6A
+#define OBPD 0xFF6B
+#define OPRI 0xFF6C
+#define SVBK 0xFF70
 #define BOOT 0xFF50  // boot ROM enable (write 1 to disable boot ROM)
 #define IE 0xFFFF    // IE register
 
@@ -84,6 +97,18 @@ typedef struct MMU {
     /* work ram */
     uint8_t wram[0x2000];  // C000h - DFFFh
 
+    bool cgb_mode;
+    bool double_speed;
+    uint8_t vram_bank1[0x2000];
+    uint8_t wram_banks[6][0x1000];
+    uint8_t bg_palette[64];
+    uint8_t obj_palette[64];
+    bool hdma_active;
+    uint16_t hdma_source;
+    uint16_t hdma_destination;
+    unsigned hdma_blocks;
+    unsigned hdma_stall_cycles;
+
     // echo ram is prohibited (according to nintendo)
 
     /* oam (object attribute memory) */
@@ -101,6 +126,9 @@ typedef struct MMU {
 void mmu_init(MMU *mmu, struct CPU *cpu, struct Timer *timer, struct PPU *ppu,
               struct Joypad *joypad, struct APU *apu);
 void mmu_reset(MMU *mmu);
+void mmu_set_cgb_mode(MMU *mmu, bool enabled);
+uint8_t mmu_vram_read(MMU *mmu, unsigned bank, uint16_t addr);
+void mmu_hdma_hblank(MMU *mmu);
 
 // free the memory allocated for the banking controller
 void mmu_cleanup(MMU *mmu);

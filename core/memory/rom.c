@@ -9,7 +9,20 @@
 
 #include "mmu.h"
 
+bool rom_select_model(MMU *mmu, rom_model model) {
+    uint8_t flag = mmu->rom[0x143];
+    bool cgb = model == ROM_MODEL_CGB ||
+               (model == ROM_MODEL_AUTO && (flag == 0x80 || flag == 0xC0));
+    if (!cgb && flag == 0xC0) {
+        fprintf(stderr, "This cartridge requires Game Boy Color; use gbc or --model cgb.\n");
+        return false;
+    }
+    mmu_set_cgb_mode(mmu, cgb);
+    return true;
+}
+
 static const char *cartridge_type_str(uint8_t t) {
+    if (t >= 0x19 && t <= 0x1E) return "MBC5";
     switch (t) {
         case 0x00: return "ROM ONLY";
         case 0x01: return "MBC1";
@@ -23,7 +36,6 @@ static const char *cartridge_type_str(uint8_t t) {
         case 0x10: return "MBC3+TIMER+RAM+BATTERY";
         case 0x11: return "MBC3";
         case 0x13: return "MBC3+RAM+BATTERY";
-        case 0x19: return "MBC5";
         default:   return "UNKNOWN";
     }
 }
@@ -35,8 +47,8 @@ static const char *rom_size_str(uint8_t c) {
 }
 
 static const char *ram_size_str(uint8_t c) {
-    static const char *sizes[] = {"0KB", "2KB", "8KB", "32KB"};
-    return (c <= 3) ? sizes[c] : "UNKNOWN";
+    static const char *sizes[] = {"0KB", "2KB", "8KB", "32KB", "128KB", "64KB"};
+    return (c <= 5) ? sizes[c] : "UNKNOWN";
 }
 
 /* cartridge headers for the DMG start at the address 0x0100 and end at 0x014F
@@ -69,6 +81,10 @@ void log_header(MMU *mmu) {
 }
 
 void load_boot_rom(MMU *mmu, const char *boot_rom_path) {
+    if (mmu->cgb_mode) {
+        fprintf(stderr, "CGB boot ROMs are not supported; use the post-boot startup.\n");
+        exit(EXIT_FAILURE);
+    }
     FILE *file = fopen(boot_rom_path, "rb");
     if (!file) {
         fprintf(stderr, "Failed to open boot ROM: %s\n", boot_rom_path);
@@ -90,12 +106,20 @@ void load_boot_rom(MMU *mmu, const char *boot_rom_path) {
 
 void load_rom(MMU *mmu, const char *filepath) {
     FILE *file = fopen(filepath, "rb");
-    assert(file && "ROM not found?");
+    if (!file) {
+        perror(filepath);
+        exit(EXIT_FAILURE);
+    }
 
     /* get file size */
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);
     fseek(file, 0, SEEK_SET);
+    if (file_size < 0x150 || file_size > 0x800000) {
+        fprintf(stderr, "Invalid cartridge size: %ld bytes\n", file_size);
+        fclose(file);
+        exit(EXIT_FAILURE);
+    }
 
     printf("Loading ROM: %s (%ld bytes)\n", filepath, file_size);
 
@@ -105,7 +129,11 @@ void load_rom(MMU *mmu, const char *filepath) {
     /* read cartridge header info first (load at least 32KB for header) */
     size_t initial_read_size = (file_size < 0x8000) ? file_size : 0x8000;
     size_t read              = fread(mmu->rom, 1, initial_read_size, file);
-    assert(read > 0x147 && "ROM too small - missing header");
+    if (read != initial_read_size) {
+        fprintf(stderr, "Failed to read cartridge header\n");
+        fclose(file);
+        exit(EXIT_FAILURE);
+    }
 
     /* extract header information */
     uint8_t cart_type     = mmu->rom[0x0147];
@@ -114,6 +142,11 @@ void load_rom(MMU *mmu, const char *filepath) {
 
     /* initialize MBC */
     mbc_init(&mmu->mbc, cart_type, rom_size_code, ram_size_code);
+    if ((unsigned long)file_size > mmu->mbc.rom_size) {
+        fprintf(stderr, "Cartridge file exceeds the ROM size declared in its header\n");
+        fclose(file);
+        exit(EXIT_FAILURE);
+    }
 
     /* allocate and load full ROM */
     mmu->cartridge_rom_size = mmu->mbc.rom_size;

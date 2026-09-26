@@ -11,7 +11,7 @@
 #include "../core/audio/apu.h"
 #include "../core/input/joyp.h"
 
-typedef struct {
+typedef struct CoreMachine {
     CPU cpu;
     MMU mmu;
     Timer timer;
@@ -20,7 +20,7 @@ typedef struct {
     Joypad joypad;
 } CoreMachine;
 
-static void core_init(CoreMachine *m) {
+static inline void core_init(CoreMachine *m) {
     memset(m, 0, sizeof(*m));
     mmu_init(&m->mmu, &m->cpu, &m->timer, &m->ppu, &m->joypad, &m->apu);
     cpu_init(&m->cpu, &m->mmu, &m->timer, &m->ppu, &m->apu);
@@ -31,12 +31,12 @@ static void core_init(CoreMachine *m) {
     m->cpu.pc = 0x100;
 }
 
-static void core_cleanup(CoreMachine *m) {
+static inline void core_cleanup(CoreMachine *m) {
     apu_cleanup(&m->apu);
     mmu_cleanup(&m->mmu);
 }
 
-static void core_synthetic(CoreMachine *m) {
+static inline void core_synthetic(CoreMachine *m) {
     static const uint8_t program[] = {
         0x21, 0x00, 0xC0, 0x34, 0x7E, 0xCB, 0x07, 0xEE, 0x5A,
         0xE0, 0x43, 0x23, 0x7D, 0xE6, 0x1F, 0x6F, 0x18, 0xF1

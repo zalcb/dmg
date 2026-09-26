@@ -55,12 +55,16 @@ dkms.conf
 *.clangd
 .cache/
 compile_commands.json
+__pycache__/
 
 # Build files and executables
 build/
 gb
 gb-debug
 gb-asan
+gbc
+gbc-debug
+gbc-asan
 
 # ROMs
 roms/
