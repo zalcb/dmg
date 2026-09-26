@@ -512,7 +512,7 @@ static void power_off(APU *apu) {
 
 static void init_highpass_filter(APU *apu, float cutoff_hz) {
     float sample_rate = 48000.0f;
-    float rc          = 1.0f / (2.0f * M_PI * cutoff_hz);
+    float rc          = 1.0f / (2.0f * 3.14159265358979323846 * cutoff_hz);
     float dt          = 1.0f / sample_rate;
     apu->hp_alpha     = rc / (rc + dt);
 }
