@@ -5,16 +5,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Install pinned Sentrux
         run: |
           curl -fsSL https://github.com/sentrux/sentrux/releases/download/v0.5.7/sentrux-linux-x86_64 -o /tmp/sentrux
           echo '3237f80fe20d54aad4deefa8a143f0d60543bb5d2d6ad891eb42432f155725a6  /tmp/sentrux' | sha256sum -c -
           chmod +x /tmp/sentrux
       - name: Preserve structural baseline
-        run: |
-          /tmp/sentrux check . | tee /tmp/sentrux-check.txt
-          /tmp/sentrux gate .
-          test "$(awk '/^Quality:/ {print $2}' /tmp/sentrux-check.txt)" -ge 8034
+        run: SENTRUX=/tmp/sentrux bash .github/scripts/check-structure.sh
   core:
     strategy:
       fail-fast: false
@@ -28,6 +27,8 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - run: brew install raylib pkg-config
       - run: make -j3 all debug asan
       - run: python3 tests/bench_compare.py --cycles 4194304 --runs 1
