@@ -117,34 +117,30 @@ static void render_background_in_scanline(PPU *ppu) {
     uint16_t tile_data_base_address = (lcdc & 0x10) ? 0x8000 : 0x9000;
     int signed_tile_data            = (lcdc & 0x10) ? 0 : 1;  // signed or unsigned tile data
 
-    /* for each pixel in current scanline */
-    for (int x = 0; x < LCD_WIDTH; x++) {
-        /* calculate the tile index and pixel index */
-        uint8_t y                 = (ppu->current_scanline + scy) & 0xFF;
+    uint8_t y = (ppu->current_scanline + scy) & 0xFF;
+    uint16_t tile_map_row = tile_map_base_address + (y >> 3) * 32;
+    int tile_row_offset = (y & 7) * 2;
+    uint8_t *pixels = ppu->framebuffer[ppu->current_scanline];
+
+    for (int x = 0; x < LCD_WIDTH;) {
         uint8_t xw                = (x + scx) & 0xFF;
-
-        int tile_x                = (xw >> 3);
-        int tile_y                = (y >> 3);
-        int pixel_x               = xw % 8;
-        int pixel_y               = y % 8;
-
-        /* get the tile index from the tile map */
-        uint16_t tile_map_address = tile_map_base_address + tile_y * 32 + tile_x;
-        uint8_t tile_index        = mmu_read(ppu->mmu, tile_map_address);
-
-        /* get the tile data */
+        int pixel_x = xw & 7;
+        int span = 8 - pixel_x;
+        if (span > LCD_WIDTH - x) {
+            span = LCD_WIDTH - x;
+        }
+        uint8_t tile_index = mmu_read(ppu->mmu, tile_map_row + (xw >> 3));
         uint16_t tile_data_address =
-            tile_data_base_address + (signed_tile_data ? (int8_t)tile_index : tile_index) * 16;
-        uint8_t low_byte  = mmu_read(ppu->mmu, tile_data_address + pixel_y * 2);
-        uint8_t high_byte = mmu_read(ppu->mmu, tile_data_address + pixel_y * 2 + 1);
+            tile_data_base_address + (signed_tile_data ? (int8_t)tile_index : tile_index) * 16 +
+            tile_row_offset;
+        uint8_t low_byte  = mmu_read(ppu->mmu, tile_data_address);
+        uint8_t high_byte = mmu_read(ppu->mmu, tile_data_address + 1);
 
-        /* get the color index from the low and high bytes */
-        uint8_t color_index =
-            ((low_byte >> (7 - pixel_x)) & 0x01) | (((high_byte >> (7 - pixel_x)) & 0x01) << 1);
-
-        /* set the color in the framebuffer */
-        ppu->framebuffer[ppu->current_scanline][x] =
-            (bgp >> (color_index * 2)) & 0x03;  // get the color from BGP
+        for (int end = x + span; x < end; x++, pixel_x++) {
+            uint8_t color_index =
+                ((low_byte >> (7 - pixel_x)) & 0x01) | (((high_byte >> (7 - pixel_x)) & 0x01) << 1);
+            pixels[x] = (bgp >> (color_index * 2)) & 0x03;
+        }
     }
 }
 
@@ -185,41 +181,32 @@ static void render_window_in_scanline(PPU *ppu) {
     uint16_t tile_data_base_address = (lcdc & 0x10) ? 0x8000 : 0x9000;
     int signed_tile_data            = (lcdc & 0x10) ? 0 : 1;  // signed or unsigned tile data
 
-    bool window_rendered            = false;  // flag to indicate if the window was rendered
+    uint16_t tile_map_row = tile_map_base_address + (window_y >> 3) * 32;
+    int tile_row_offset = (window_y & 7) * 2;
+    uint8_t *pixels = ppu->framebuffer[ppu->current_scanline];
 
-    /* for each pixel in the current scanline */
-    for (int lcd_x = (start_x > 0) ? start_x : 0; lcd_x < LCD_WIDTH; lcd_x++) {
-        window_rendered           = true;             // we are rendering the window
+    for (int lcd_x = (start_x > 0) ? start_x : 0; lcd_x < LCD_WIDTH;) {
         uint8_t window_x          = lcd_x - start_x;  // relative x position in the window
-
-        int tile_x                = (window_x >> 3);
-        int tile_y                = (window_y >> 3);
-        int pixel_x               = window_x % 8;
-        int pixel_y               = window_y % 8;
-
-        /* get the tile index from the tile map */
-        uint16_t tile_map_address = tile_map_base_address + tile_y * 32 + tile_x;
-        uint8_t tile_index        = mmu_read(ppu->mmu, tile_map_address);
-
-        /* get the tile data */
+        int pixel_x = window_x & 7;
+        int span = 8 - pixel_x;
+        if (span > LCD_WIDTH - lcd_x) {
+            span = LCD_WIDTH - lcd_x;
+        }
+        uint8_t tile_index = mmu_read(ppu->mmu, tile_map_row + (window_x >> 3));
         uint16_t tile_data_address =
-            tile_data_base_address + (signed_tile_data ? (int8_t)tile_index : tile_index) * 16;
-        uint8_t low_byte  = mmu_read(ppu->mmu, tile_data_address + pixel_y * 2);
-        uint8_t high_byte = mmu_read(ppu->mmu, tile_data_address + pixel_y * 2 + 1);
+            tile_data_base_address + (signed_tile_data ? (int8_t)tile_index : tile_index) * 16 +
+            tile_row_offset;
+        uint8_t low_byte  = mmu_read(ppu->mmu, tile_data_address);
+        uint8_t high_byte = mmu_read(ppu->mmu, tile_data_address + 1);
 
-        /* get the color index from the low and high bytes */
-        uint8_t color_index =
-            ((low_byte >> (7 - pixel_x)) & 0x01) | (((high_byte >> (7 - pixel_x)) & 0x01) << 1);
-
-        /* set the color in the framebuffer */
-        ppu->framebuffer[ppu->current_scanline][lcd_x] =
-            (bgp >> (color_index * 2)) & 0x03;  // get the color from BGP
+        for (int end = lcd_x + span; lcd_x < end; lcd_x++, pixel_x++) {
+            uint8_t color_index =
+                ((low_byte >> (7 - pixel_x)) & 0x01) | (((high_byte >> (7 - pixel_x)) & 0x01) << 1);
+            pixels[lcd_x] = (bgp >> (color_index * 2)) & 0x03;
+        }
     }
 
-    /* if the window was rendered, increment the window line counter */
-    if (window_rendered) {
-        ppu->window_line_counter++;
-    }
+    ppu->window_line_counter++;
 }
 
 static void scan_oam(PPU *ppu) {
