@@ -50,7 +50,6 @@ static void log_cpu_state(CPU *cpu) {
             cpu->a, cpu->f, /* <-- F is raw byte */
             cpu->b, cpu->c, cpu->d, cpu->e, cpu->h, cpu->l, cpu->sp, cpu->pc, b0, b1, b2, b3);
 
-    fflush(cpu_log);
 }
 
 /* function to tick the emulator components */
@@ -131,7 +130,7 @@ void cpu_step(CPU *cpu) {
         }
     }
 
-    log_cpu_state(cpu); /* log the previous CPU state */
+    if (cpu_log) log_cpu_state(cpu);
 
     /* acknowledge pending interrupts */
     if (cpu->ime && !cpu->dma_flag) {
