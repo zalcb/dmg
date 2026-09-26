@@ -21,6 +21,8 @@ static uint32_t get_ram_size_bytes(uint8_t ram_size_code) {
         case 1:  return 0x800;   // 2KB
         case 2:  return 0x2000;  // 8KB
         case 3:  return 0x8000;  // 32KB
+        case 4:  return 0x20000;
+        case 5:  return 0x10000;
         default: return 0;
     }
 }
@@ -39,7 +41,12 @@ static mbc_type_t cartridge_type_to_mbc_type(uint8_t cart_type) {
         case 0x11: return MBC3;
         case 0x12: return MBC3;
         case 0x13: return MBC3_RAM_BAT;
-        case 0x19: return MBC5;
+        case 0x19:
+        case 0x1A:
+        case 0x1B:
+        case 0x1C:
+        case 0x1D:
+        case 0x1E: return MBC5;
         default:   return MBC_NONE;
     }
 }
@@ -48,6 +55,7 @@ void mbc_init(MBC *mbc, uint8_t cartridge_type, uint8_t rom_size_code, uint8_t r
     memset(mbc, 0, sizeof(MBC));
 
     mbc->type     = cartridge_type_to_mbc_type(cartridge_type);
+    mbc->mbc5_rumble = cartridge_type >= 0x1C && cartridge_type <= 0x1E;
     mbc->rom_size = get_rom_size_bytes(rom_size_code);
 
     if (mbc->type == MBC2) {
@@ -84,7 +92,7 @@ void mbc_reset(MBC *mbc) {
     memset(&mbc->rtc, 0, sizeof(mbc3_rtc_t));
 }
 
-uint8_t mbc_get_current_rom_bank(MBC *mbc) {
+uint16_t mbc_get_current_rom_bank(MBC *mbc) {
     switch (mbc->type) {
         case MBC1:
         case MBC1_RAM:
@@ -119,6 +127,9 @@ uint8_t mbc_get_current_rom_bank(MBC *mbc) {
             return bank % mbc->rom_banks;  // ensure we don't exceed available banks
         }
 
+        case MBC5:
+            return (((mbc->rom_bank_high & 1) << 8) | mbc->rom_bank_low) % mbc->rom_banks;
+
         case MBC_NONE:
         default:       return 1;  // no banking, always bank 1 for 0x4000-0x7FFF
     }
@@ -137,6 +148,9 @@ uint8_t mbc_get_current_ram_bank(MBC *mbc) {
         case MBC3_RAM_BAT:
             return (mbc->mbc3_mode <= 0x03) ? (mbc->mbc3_mode & 0x03)
                                             : 0;  // MBC3 uses lower 2 bits for RAM bank selection
+
+        case MBC5:
+            return mbc->ram_banks ? mbc->ram_bank % mbc->ram_banks : 0;
 
         case MBC_NONE:
         case MBC1:
@@ -164,7 +178,7 @@ uint8_t mbc_read_rom(MBC *mbc, struct MMU *mmu, uint16_t addr) {
         }
     } else {
         // switchable bank area (0x4000-0x7FFF)
-        uint8_t bank  = mbc_get_current_rom_bank(mbc);
+        uint16_t bank  = mbc_get_current_rom_bank(mbc);
         physical_addr = (bank * 0x4000) + (addr - 0x4000);
     }
 
@@ -215,7 +229,23 @@ uint8_t mbc_read_ram(MBC *mbc, struct MMU *mmu, uint16_t addr) {
     return mmu->cartridge_ram[physical_addr];
 }
 
+static void mbc5_write_control(MBC *mbc, uint16_t addr, uint8_t value) {
+    if (addr < 0x2000) {
+        mbc->ram_enable = (value & 0x0F) == 0x0A;
+    } else if (addr < 0x3000) {
+        mbc->rom_bank_low = value;
+    } else if (addr < 0x4000) {
+        mbc->rom_bank_high = value & 1;
+    } else if (addr < 0x6000) {
+        mbc->ram_bank = value & (mbc->mbc5_rumble ? 0x07 : 0x0F);
+    }
+}
+
 void mbc_write_control(MBC *mbc, uint16_t addr, uint8_t value) {
+    if (mbc->type == MBC5) {
+        mbc5_write_control(mbc, addr, value);
+        return;
+    }
     switch (mbc->type) {
         case MBC1:
         case MBC1_RAM:

@@ -60,6 +60,7 @@ typedef struct MBC {
     /* RAM banking */
     bool ram_enable;   // RAM enable flag
     uint8_t ram_bank;  // current RAM bank
+    bool mbc5_rumble;
 
     /* MBC1 specific */
     mbc1_mode_t mbc1_mode;  // MBC1 banking mode
@@ -74,7 +75,7 @@ typedef struct MBC {
     /* ROM/RAM sizes */
     uint32_t rom_size;  // total ROM size in bytes
     uint32_t ram_size;  // total RAM size in bytes
-    uint8_t rom_banks;  // number of ROM banks
+    uint16_t rom_banks;  // number of ROM banks
     uint8_t ram_banks;  // number of RAM banks
 
 } MBC;
@@ -91,7 +92,7 @@ void mbc_write_control(MBC *mbc, uint16_t addr, uint8_t value);
 void mbc_write_ram(MBC *mbc, struct MMU *mmu, uint16_t addr, uint8_t value);
 
 /* helper functions */
-uint8_t mbc_get_current_rom_bank(MBC *mbc);
+uint16_t mbc_get_current_rom_bank(MBC *mbc);
 uint8_t mbc_get_current_ram_bank(MBC *mbc);
 void mbc_update_rtc(MBC *mbc);
 
