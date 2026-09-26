@@ -1,14 +1,16 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include "apu.h"
-#include "cpu.h"
-#include "joyp.h"
-#include "mbc.h"
-#include "mmu.h"
-#include "ppu.h"
+#include "../core/audio/apu.h"
+#include "../core/cpu/cpu.h"
+#include "../core/input/joyp.h"
+#include "../core/memory/mbc.h"
+#include "../core/memory/mmu.h"
+#include "../core/video/ppu.h"
 #include "raylib.h"
-#include "rom.h"
-#include "timer.h"
+#include "../core/memory/rom.h"
+#include "../core/timer/timer.h"
 #include "utils.h"
 
 // declare the components
@@ -23,6 +25,20 @@ void AudioInputCallback(void *buffer, unsigned int frames) {
     float *stream = (float *)buffer;
 
     apu_get_samples(&apu, stream, frames);
+}
+
+static void joypad_update(Joypad *pad) {
+    uint8_t buttons = 0x0F;
+    uint8_t dpad = 0x0F;
+    if (IsKeyDown(KEY_Z)) buttons &= ~JOYP_A;
+    if (IsKeyDown(KEY_X)) buttons &= ~JOYP_B;
+    if (IsKeyDown(KEY_ENTER)) buttons &= ~JOYP_START;
+    if (IsKeyDown(KEY_SPACE)) buttons &= ~JOYP_SELECT;
+    if (IsKeyDown(KEY_RIGHT)) dpad &= ~JOYP_RIGHT;
+    if (IsKeyDown(KEY_LEFT)) dpad &= ~JOYP_LEFT;
+    if (IsKeyDown(KEY_UP)) dpad &= ~JOYP_UP;
+    if (IsKeyDown(KEY_DOWN)) dpad &= ~JOYP_DOWN;
+    joypad_set_state(pad, buttons, dpad);
 }
 
 int main(int argc, char *argv[]) {
@@ -122,7 +138,7 @@ int main(int argc, char *argv[]) {
     UnloadTexture(texture);
     CloseWindow();
 
-    free(apu.audio_buffer);
+    apu_cleanup(&apu);
     mmu_cleanup(&mmu);
     if (cpu_log && fclose(cpu_log)) {
         perror("trace close");

@@ -6,8 +6,8 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "cpu.h"
-#include "mmu.h"
+#include "../cpu/cpu.h"
+#include "../memory/mmu.h"
 
 #define CYCLES_PER_SCANLINE 456
 #define CYCLES_OAM_SCAN 80

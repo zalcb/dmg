@@ -1,7 +1,6 @@
 #include "timer.h"
 
-#include "cpu.h"
-#include "mmu.h"
+#include "../cpu/cpu.h"
 
 /* helpers */
 /* map TAC bits 1:0 to DIV bit numbers */

@@ -2,9 +2,17 @@ name: Core regression tests
 on: [push, pull_request]
 jobs:
   core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: make test test-debug test-asan
+  frontend:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - run: brew install raylib pkg-config
-      - run: make -j3 all debug asan headless
-      - run: make test test-debug test-asan
+      - run: make -j3 all debug asan

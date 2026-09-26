@@ -5,8 +5,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cpu.h"
-#include "joyp.h"
+#include "../cpu/cpu.h"
+#include "../audio/apu.h"
+#include "../video/ppu.h"
+#include "../timer/timer.h"
+#include "../input/joyp.h"
 
 void mmu_init(MMU *mmu, struct CPU *cpu, struct Timer *timer, struct PPU *ppu,
               struct Joypad *joypad, struct APU *apu) {

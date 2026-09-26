@@ -38,6 +38,6 @@ void joypad_init(Joypad *joypad, struct MMU *mmu, struct CPU *cpu);
 void joypad_reset(Joypad *joypad);
 uint8_t joypad_read(Joypad *joypad);
 void joypad_write(Joypad *joypad, uint8_t value);
-void joypad_update(Joypad *joypad);
+void joypad_set_state(Joypad *joypad, uint8_t buttons, uint8_t dpad);
 
 #endif

@@ -8,6 +8,10 @@
 #include <string.h>
 
 #include "opcodes.h"
+#include "../audio/apu.h"
+#include "../memory/mmu.h"
+#include "../video/ppu.h"
+#include "../timer/timer.h"
 
 FILE *cpu_log = NULL;
 
@@ -89,9 +93,9 @@ static void interrupt_servicing_routine(CPU *cpu) {
 
     uint16_t ret   = cpu->pc; /* save the current program counter */
     cpu->sp--;
-    mem_write(cpu->sp, (ret >> 8) & 0xFF); /* push the high byte */
+    mmu_write(cpu->mmu, cpu->sp, (ret >> 8) & 0xFF); /* push the high byte */
     cpu->sp--;
-    mem_write(cpu->sp, ret & 0xFF); /* push the low byte */
+    mmu_write(cpu->mmu, cpu->sp, ret & 0xFF); /* push the low byte */
     cpu->pc = 0x0040 + (id * 8);    /* set the program counter to the interrupt vector */
     tick(cpu, 20);
 }
@@ -100,7 +104,7 @@ static void interrupt_servicing_routine(CPU *cpu) {
 - fetch the next instruction from the memory bus (address indicated by pc)
 */
 static uint8_t fetch(CPU *cpu) {
-    uint8_t opcode = mem_read(cpu->pc);
+    uint8_t opcode = mmu_read(cpu->mmu, cpu->pc);
     if (!cpu->halt_bug)
         cpu->pc++; /* increment the program counter to point to the next
                           instruction (length=1) OR the next operand (length>1) */

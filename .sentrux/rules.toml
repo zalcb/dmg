@@ -1,0 +1,7 @@
+[constraints]
+max_cycles = 0
+
+[[boundaries]]
+from = "core/**"
+to = "src/**"
+reason = "The emulation core must not depend on the raylib frontend."

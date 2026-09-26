@@ -1,8 +1,8 @@
 import argparse
 import os
 import pathlib
+import re
 import shlex
-import shutil
 import statistics
 import subprocess
 import tempfile
@@ -31,7 +31,10 @@ with tempfile.TemporaryDirectory(prefix="dmg-baseline-") as directory:
     subprocess.run(["tar", "-x", "-C", directory], input=archive, check=True)
     (baseline / "tests").mkdir()
     for name in ("core_machine.h", "core_runner.c"):
-        shutil.copyfile(root / "tests" / name, baseline / "tests" / name)
+        source = (root / "tests" / name).read_text()
+        source = re.sub(r'"../core/[^/]+/([^/]+\.h)"', r'"../include/\1"', source)
+        source = source.replace("apu_cleanup(&m->apu);", "free(m->apu.audio_buffer);")
+        (baseline / "tests" / name).write_text(source)
     command = [os.environ.get("CC", "clang"), "-std=c18", "-O3", "-Iinclude", "-Isrc", "-Itests",
                "tests/core_runner.c", *sorted(str(p.relative_to(baseline)) for p in (baseline / "lib").glob("*.c")),
                *flags, "-lm", "-o"]
