@@ -52,6 +52,8 @@ typedef struct CPU {
 
     // cpu cycle counter
     uint64_t cycles;
+    uint64_t base_cycles;
+    unsigned speed_cycle_remainder;
 
     // interrupt enable register
     int ime;       /* 0 or 1, current state (READ ONLY) */

@@ -38,6 +38,13 @@ void cpu_init(struct CPU *cpu, struct MMU *mmu, struct Timer *timer, struct PPU 
     cpu->h     = 0x01;
     cpu->l     = 0x4D;
 
+    if (mmu->cgb_mode) {
+        cpu->af = 0x1180;
+        cpu->bc = 0x0000;
+        cpu->de = 0xFF56;
+        cpu->hl = 0x000D;
+    }
+
     cpu->pc    = 0x0000;
     cpu->sp    = 0xFFFE;
 }
@@ -58,10 +65,35 @@ static void log_cpu_state(CPU *cpu) {
 
 /* function to tick the emulator components */
 void tick(CPU *cpu, int cycles) {
-    cpu->cycles += cycles;
-    timer_step(cpu->timer, cycles); /* update the timer */
-    ppu_step(cpu->ppu, cycles);     /* update the PPU */
-    apu_step(cpu->apu, cycles);     /* update the APU */
+    if (!cpu->mmu->cgb_mode) {
+        cpu->cycles += cycles;
+        cpu->base_cycles += cycles;
+        timer_step(cpu->timer, cycles);
+        ppu_step(cpu->ppu, cycles);
+        apu_step(cpu->apu, cycles);
+        return;
+    }
+    while (cycles > 0 || cpu->mmu->hdma_stall_cycles) {
+        unsigned step;
+        if (cpu->mmu->hdma_stall_cycles) {
+            step = cpu->mmu->hdma_stall_cycles < 4 ? cpu->mmu->hdma_stall_cycles : 4;
+            cpu->mmu->hdma_stall_cycles -= step;
+        } else {
+            step = cycles < 4 ? (unsigned)cycles : 4;
+            cycles -= step;
+        }
+        cpu->cycles += step;
+        timer_step(cpu->timer, step);
+        unsigned base = step;
+        if (cpu->mmu->double_speed) {
+            base += cpu->speed_cycle_remainder;
+            cpu->speed_cycle_remainder = base & 1;
+            base /= 2;
+        }
+        cpu->base_cycles += base;
+        ppu_step(cpu->ppu, base);
+        apu_step(cpu->apu, base);
+    }
 }
 
 /* function to process an interrupt
@@ -115,6 +147,10 @@ static uint8_t fetch(CPU *cpu) {
 }
 
 void cpu_step(CPU *cpu) {
+    if (cpu->mmu->hdma_stall_cycles) {
+        tick(cpu, 0);
+        return;
+    }
     /* handle halt */
     if (cpu->halt == 1) {
         uint8_t flagged_and_enabled = cpu->ifr & cpu->ier & 0x1F;

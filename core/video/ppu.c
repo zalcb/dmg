@@ -1,4 +1,5 @@
 #include "ppu.h"
+#include "cgb_render.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -32,6 +33,7 @@ void ppu_init(PPU *ppu, struct MMU *mmu, struct CPU *cpu) {
 void ppu_reset(PPU *ppu) {
     /* reset the framebuffer */
     memset(ppu->framebuffer, 0, sizeof(ppu->framebuffer));
+    memset(ppu->color_framebuffer, 0, sizeof(ppu->color_framebuffer));
 
     /* reset the PPU state */
     ppu->scanline_cycles  = 0;
@@ -249,6 +251,10 @@ static void scan_oam(PPU *ppu) {
         }
     }
 
+    if (ppu->mmu->cgb_mode && !(mmu_read(ppu->mmu, OPRI) & 1)) {
+        return;
+    }
+
     /* sort the sprite data by priority: first by x coords (asc), then by OAM index */
     for (int i = 0; i < ppu->num_scanline_sprites - 1; i++) {
         for (int j = i + 1; j < ppu->num_scanline_sprites; j++) {
@@ -390,11 +396,18 @@ void ppu_step(PPU *ppu, int cycles) {
                 ppu->scanline_cycles -= CYCLES_DRAWING_AVG;
 
                 if (ppu->current_scanline < LCD_HEIGHT) {
-                    render_background_in_scanline(ppu);
-                    render_window_in_scanline(ppu);
-                    render_sprites_in_scanline(ppu);
+                    if (ppu->mmu->cgb_mode) {
+                        cgb_render_scanline(ppu);
+                    } else {
+                        render_background_in_scanline(ppu);
+                        render_window_in_scanline(ppu);
+                        render_sprites_in_scanline(ppu);
+                    }
                 }
                 change_mode(ppu, PPU_MODE_HBLANK);
+                if (ppu->current_scanline < LCD_HEIGHT) {
+                    mmu_hdma_hblank(ppu->mmu);
+                }
             }
             break;
 
@@ -446,6 +459,10 @@ void ppu_step(PPU *ppu, int cycles) {
 /* function to get the current framebuffer data */
 const uint8_t (*ppu_get_framebuffer(PPU *ppu))[LCD_WIDTH] {
     return (const uint8_t (*)[LCD_WIDTH])ppu->framebuffer;
+}
+
+const uint16_t (*ppu_get_color_framebuffer(PPU *ppu))[LCD_WIDTH] {
+    return (const uint16_t (*)[LCD_WIDTH])ppu->color_framebuffer;
 }
 
 /* dma transfer function (used in mmu!) */

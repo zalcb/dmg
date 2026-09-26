@@ -73,6 +73,19 @@ static inline void add_i8_to_u16(uint16_t sp, int8_t off, uint16_t *out, CPU *cp
 #define ADV_PC(cpu, n) advance_pc((cpu), (n))
 #define ADV_CYCLES(cpu, n) tick((cpu), (n))
 
+static void op_stop(CPU *cpu) {
+    cpu->pc++;
+    tick(cpu, 4);
+    if (cpu->mmu->cgb_mode && (mmu_read(cpu->mmu, KEY1) & 1)) {
+        cpu->mmu->double_speed = !cpu->mmu->double_speed;
+        cpu->speed_cycle_remainder = 0;
+        mmu_write(cpu->mmu, KEY1, 0);
+        mmu_write(cpu->mmu, DIV, 0);
+    } else {
+        cpu->halt = 1;
+    }
+}
+
 static inline void call_u16(CPU *cpu) {
     /* 1. fetch the target address (little‑endian) */
     uint16_t target = mem_read16(cpu->pc);
@@ -2277,6 +2290,7 @@ void decode_and_execute(CPU *cpu, uint8_t op) {
 
         /* ---- ctrl/misc ---- */
         case 0x00: op_0x00_nop(cpu); break;
+        case 0x10: op_stop(cpu); break;
         case 0x76: op_0x76_halt(cpu); break;
         case 0xF3: op_0xf3_di(cpu); break;
         case 0xFB: op_0xfb_ei(cpu); break;

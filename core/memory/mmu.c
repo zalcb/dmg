@@ -1,4 +1,5 @@
 #include "mmu.h"
+#include "cgb.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -18,6 +19,7 @@ void mmu_init(MMU *mmu, struct CPU *cpu, struct Timer *timer, struct PPU *ppu,
     mmu->ppu                = ppu;
     mmu->joypad             = joypad;
     mmu->apu                = apu;
+    mmu->cgb_mode           = false;
 
     /* initialize cartridge pointers to NULL */
     mmu->cartridge_rom      = NULL;
@@ -39,6 +41,7 @@ void mmu_reset(MMU *mmu) {
     memset(mmu->oam, 0, sizeof(mmu->oam));
     memset(mmu->io, 0, sizeof(mmu->io));
     memset(mmu->hram, 0, sizeof(mmu->hram));
+    mmu_set_cgb_mode(mmu, mmu->cgb_mode);
 
     if (!mmu->boot_rom_enabled) {
         mmu->io[0x00] = 0xCF; /* JOYP - all buttons released */
@@ -68,7 +71,9 @@ uint8_t mmu_read(MMU *mmu, uint16_t addr) {
             return mmu->rom[addr];
         }
     } else if (addr < 0xA000) {
-        return mmu->vram[addr - 0x8000]; /* read from VRAM */
+        if (cgb_vram_blocked(mmu)) return 0xFF;
+        unsigned bank = mmu->cgb_mode ? mmu->io[VBK - 0xFF00] : 0;
+        return mmu_vram_read(mmu, bank, addr);
     } else if (addr < 0xC000) {
         /* external RAM area - use MBC for bank switching */
         if (mmu->cartridge_ram) {
@@ -77,15 +82,15 @@ uint8_t mmu_read(MMU *mmu, uint16_t addr) {
             /* fallback to legacy ERAM */
             return mmu->eram[addr - 0xA000];
         }
-    } else if (addr < 0xE000) {
-        return mmu->wram[addr - 0xC000]; /* read from WRAM */
     } else if (addr < 0xFE00) {
-        return mmu->wram[addr - 0xE000]; /* read from WRAM */
+        return *cgb_wram_address(mmu, addr);
     } else if (addr < 0xFEA0) {
         return mmu->oam[addr - 0xFE00]; /* read from OAM */
     } else if (addr < 0xFF00) {
         return 0xFF; /* prohibited area */
     } else if (addr < 0xFF80) {
+        uint8_t value;
+        if (cgb_read_register(mmu, addr, &value)) return value;
         switch (addr) {
             case JOYP:   return joypad_read(mmu->joypad);      /* JOYP register */
             case DIV:    return mmu->timer->div >> 8;          /* DIV register */
@@ -116,7 +121,6 @@ uint8_t mmu_read(MMU *mmu, uint16_t addr) {
             case NR52:   return apu_read(mmu->apu, addr);   /* read from APU registers */
             case LY:     return mmu->ppu->current_scanline; /* LY register */
             case STAT:   return (mmu->io[0x41] & 0xF8) | (mmu->ppu->mode & 0x03); /* STAT register */
-            case 0xFF4D: /* undocumented read */
             case 0xFF56: return 0xFF;
             default:
                 if (addr >= 0xFF30 && addr <= 0xFF3F) {
@@ -138,13 +142,63 @@ uint16_t mmu_read16(MMU *mmu, uint16_t addr) {
     return (high << 8) | low;               /* combine the two bytes */
 }
 
+static void hdma_block(MMU *mmu) {
+    uint8_t *vram = mmu->io[VBK - 0xFF00] & 1 ? mmu->vram_bank1 : mmu->vram;
+    for (unsigned i = 0; i < 16; ++i) {
+        uint16_t source = mmu->hdma_source + i;
+        bool valid = source < 0x8000 || (source >= 0xA000 && source < 0xE000);
+        vram[(mmu->hdma_destination + i) & 0x1FFF] = valid ? mmu_read(mmu, source) : 0xFF;
+    }
+    mmu->hdma_source += 16;
+    mmu->hdma_destination = 0x8000 | ((mmu->hdma_destination + 16) & 0x1FFF);
+    mmu->hdma_stall_cycles += mmu->double_speed ? 64 : 32;
+    mmu->hdma_blocks--;
+    mmu->io[HDMA1 - 0xFF00] = mmu->hdma_source >> 8;
+    mmu->io[HDMA2 - 0xFF00] = mmu->hdma_source & 0xF0;
+    mmu->io[HDMA3 - 0xFF00] = (mmu->hdma_destination >> 8) & 0x1F;
+    mmu->io[HDMA4 - 0xFF00] = mmu->hdma_destination & 0xF0;
+    mmu->io[HDMA5 - 0xFF00] = (uint8_t)(mmu->hdma_blocks - 1);
+    if (!mmu->hdma_blocks) mmu->hdma_active = false;
+}
+
+void mmu_hdma_hblank(MMU *mmu) {
+    if (mmu->cgb_mode && mmu->hdma_active) hdma_block(mmu);
+}
+
+static void hdma_start(MMU *mmu, uint8_t value) {
+    if (!mmu->cgb_mode) return;
+    if (mmu->hdma_active) {
+        if (!(value & 0x80)) {
+            mmu->hdma_active = false;
+            mmu->io[HDMA5 - 0xFF00] |= 0x80;
+        }
+        return;
+    }
+    mmu->hdma_source = (mmu->io[HDMA1 - 0xFF00] << 8) |
+                       (mmu->io[HDMA2 - 0xFF00] & 0xF0);
+    mmu->hdma_destination = 0x8000 | ((mmu->io[HDMA3 - 0xFF00] & 0x1F) << 8) |
+                            (mmu->io[HDMA4 - 0xFF00] & 0xF0);
+    mmu->hdma_blocks = (value & 0x7F) + 1;
+    mmu->io[HDMA5 - 0xFF00] = value & 0x7F;
+    if ((value & 0x80) && (mmu->io[LCDC - 0xFF00] & 0x80)) {
+        mmu->hdma_active = true;
+        if (mmu->ppu && mmu->ppu->mode == PPU_MODE_HBLANK &&
+            mmu->ppu->current_scanline < 144) hdma_block(mmu);
+        return;
+    }
+    while (mmu->hdma_blocks) hdma_block(mmu);
+}
+
 void mmu_write(MMU *mmu, uint16_t addr, uint8_t value) {
     if (addr < 0x8000) {
         /* ROM area - handle MBC control writes */
         mbc_write_control(&mmu->mbc, addr, value);
         return;
     } else if (addr < 0xA000) {
-        mmu->vram[addr - 0x8000] = value; /* write to VRAM */
+        if (cgb_vram_blocked(mmu)) return;
+        uint8_t *vram = mmu->cgb_mode && (mmu->io[VBK - 0xFF00] & 1) ?
+                        mmu->vram_bank1 : mmu->vram;
+        vram[addr - 0x8000] = value;
         return;
     } else if (addr < 0xC000) {
         /* external RAM area - use MBC for bank switching */
@@ -155,11 +209,8 @@ void mmu_write(MMU *mmu, uint16_t addr, uint8_t value) {
             mmu->eram[addr - 0xA000] = value;
         }
         return;
-    } else if (addr < 0xE000) {
-        mmu->wram[addr - 0xC000] = value; /* write to WRAM */
-        return;
     } else if (addr < 0xFE00) {
-        mmu->wram[addr - 0xE000] = value; /* write to WRAM */
+        *cgb_wram_address(mmu, addr) = value;
         return;
     } else if (addr < 0xFEA0) {
         mmu->oam[addr - 0xFE00] = value; /* write to OAM */
@@ -167,7 +218,15 @@ void mmu_write(MMU *mmu, uint16_t addr, uint8_t value) {
     } else if (addr < 0xFF00) {
         return; /* prohibited area */
     } else if (addr < 0xFF80) {
+        if (cgb_write_register(mmu, addr, value)) return;
         switch (addr) {
+            case HDMA5: hdma_start(mmu, value); break;
+            case LCDC:
+                mmu->io[LCDC - 0xFF00] = value;
+                if (mmu->cgb_mode && mmu->hdma_active && !(value & 0x80)) {
+                    while (mmu->hdma_blocks) hdma_block(mmu);
+                }
+                break;
             case JOYP: joypad_write(mmu->joypad, value); break;    /* JOYP register */
             case DIV:  timer_write_div(mmu->timer); break;         /* reset the DIV register */
             case TIMA: timer_write_tima(mmu->timer, value); break; /* TIMA register */

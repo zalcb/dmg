@@ -31,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix="dmg-baseline-") as directory:
     subprocess.run(["tar", "-x", "-C", directory], input=archive, check=True)
     (baseline / "tests").mkdir()
     for name in ("core_machine.h", "core_runner.c"):
-        source = (root / "tests" / name).read_text()
+        source = output(["git", "show", f"a85c4c4:tests/{name}"], root)
         source = re.sub(r'"../core/[^/]+/([^/]+\.h)"', r'"../include/\1"', source)
         source = source.replace("apu_cleanup(&m->apu);", "free(m->apu.audio_buffer);")
         (baseline / "tests" / name).write_text(source)
